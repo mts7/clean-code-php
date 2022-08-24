@@ -16,6 +16,7 @@
   3. [Comparison](#comparison)
      * [Use identical comparison](#use-identical-comparison)
      * [Null coalescing operator](#null-coalescing-operator)
+     * [Avoid assignment in conditional expression](#avoid-assignment-in-conditional-expression)
   4. [Functions](#functions)
      * [Use default arguments instead of short circuiting or conditionals](#use-default-arguments-instead-of-short-circuiting-or-conditionals)
      * [Function arguments (2 or fewer ideally)](#function-arguments-2-or-fewer-ideally)
@@ -31,9 +32,12 @@
      * [Avoid type-checking (part 1)](#avoid-type-checking-part-1)
      * [Avoid type-checking (part 2)](#avoid-type-checking-part-2)
      * [Remove dead code](#remove-dead-code)
+     * [Write small functions](#write-small-functions)
+     * [Write simple functions](#write-simple-functions)
   5. [Objects and Data Structures](#objects-and-data-structures)
      * [Use object encapsulation](#use-object-encapsulation)
      * [Make objects have private/protected members](#make-objects-have-privateprotected-members)
+     * [Use static methods sparingly](#use-static-methods-sparingly)
   6. [Classes](#classes)
      * [Prefer composition over inheritance](#prefer-composition-over-inheritance)
      * [Avoid fluent interfaces](#avoid-fluent-interfaces)
@@ -421,6 +425,32 @@ if (isset($_GET['name'])) {
 **Good:**
 ```php
 $name = $_GET['name'] ?? $_POST['name'] ?? 'nobody';
+```
+
+**[⬆ back to top](#table-of-contents)**
+
+### Avoid assignment in conditional expression
+
+Using the assignment operator in conditional expressions frequently indicates
+programmer error and can result in unexpected behavior.
+[source](https://wiki.sei.cmu.edu/confluence/display/java/EXP51-J.+Do+not+perform+assignments+in+conditional+expressions)
+
+**Bad:**
+
+```php
+if ($result = $database->query($sql)) {
+    // do stuff with $result
+}
+```
+
+**Good:**
+
+```php
+$result = $database->query($sql);
+if ($result === null) {
+    throw new NoQueryResultsException($sql);
+}
+// do stuff with $result
 ```
 
 **[⬆ back to top](#table-of-contents)**
@@ -1171,6 +1201,159 @@ inventoryTracker('apples', $request, 'www.inventory-awesome.io');
 
 **[⬆ back to top](#table-of-contents)**
 
+### Write small functions
+
+A low line count in functions or methods shows the clear point of the function.
+Since each function should have only one responsibility, this allows for easier
+maintainability, readability, understandability, and testability.
+
+A generous number for line count is `20`.
+
+**Bad:**
+
+```php
+function actionCreate(): Model
+{
+    $parameters = $_POST['request'];
+    $required = [
+        'name',
+        'size',
+        'count',
+    ];
+    $allowed = [];
+    foreach ($required as $item) {
+        if (!array_key_exists($item, $parameters)) {
+            throw new RequiredItemNotFoundException("Required item, {$item}, is not present in the array.");
+        }
+        $allowed[$item] = $parameters[$item];
+    }
+    
+    $allowed['name'] = ucwords($allowed['name']);
+    
+    if (!is_int($allowed['count'])) {
+        throw new InvalidArgumentTypeException("The count parameter should be an integer.");
+    }
+    
+    $object = $this->database->create(self::TABLE, $allowed);
+    
+    if ($object === null) {
+        throw new CouldNotCreateObjectException('There was an error creating the object in ' . self::TABLE);
+    }
+    
+    $this->logger->info('Successfully created a new object in ' . self::TABLE);
+    
+    return $object;
+}
+```
+
+**Good:**
+
+```php
+const REQUIRED_ATTRIBUTES = ['name', 'size', 'count'];
+
+function actionCreate(): Model
+{
+    return createObject(
+         self::TABLE,
+         validateParameters($_POST['request'])
+    );
+}
+
+// since this is a generic function, it should be in a generic class
+function createObject(string $table, array $parameters): Model
+{
+    $object = $this->database->create($table, $allowed);
+    
+    if ($object === null) {
+        throw new CouldNotCreateObjectException("There was an error creating the object in {$table}.");
+    }
+    
+    $this->logger->info("Successfully created a new object in {$table}.");
+    
+    return $object;
+}
+
+function validateParameters(array $parameters): array
+{
+    $allowed = [];
+    foreach (REQUIRED_ATTRIBUTES as $item) {
+        if (!array_key_exists($item, $parameters)) {
+            throw new RequiredItemNotFoundException("Required item, {$item}, is not present in the array.");
+        }
+        $allowed[$item] = $parameters[$item];
+    }
+    
+    $allowed['name'] = ucwords($allowed['name']);
+    
+    if (!is_int($allowed['count'])) {
+        throw new InvalidArgumentTypeException("The count parameter should be an integer.");
+    }
+    
+    return $allowed;
+}
+```
+
+**[⬆ back to top](#table-of-contents)**
+
+### Write simple functions
+
+Cyclomatic complexity is a quantitative measure of the number of linearly
+independent paths through a program's source code.
+[source](https://en.wikipedia.org/wiki/Cyclomatic_complexity)
+
+A low cyclomatic complexity value is `5`, while a high value is `15`. Any value
+higher than that indicates a good reason to refactor the code.
+
+To calculate the complexity value, count the function call, each condition, and 
+each loop.
+
+When there are multiple paths a function may traverse, the function is doing too
+much work. Nested loops are an example of multiple paths and should be avoided.
+There are times when conditions are necessary (as in validating something), and 
+there are conditions when loops are necessary. In general, try to minimize these
+as much as possible in order to maintain a clear flow and easy testing.
+
+**Bad:**
+
+```php
+// Cyclomatic Complexity: 10
+function track(Event $event, string $type, array $options = []): void
+{
+    if ($type === 'Name') {
+        foreach ($options as $key => $value) {
+            if ($key === 'suffix') {
+                $event->suffix = is_scalar($value) ? $value : (string)$value;
+                break;
+            }
+        }
+        trackName($event, $options);
+    } elseif ($type === 'Email') {
+        trackEmail($event, $options);
+    } elseif ($type === 'Phone') {
+        trackPhone($event, $options);
+    } elseif ($type === 'Address') {
+        trackAddress($event, $options);
+    } elseif ($type === 'City') {
+        trackCity($event, $options);
+    } elseif ($type === 'State') {
+        trackState($event, $options);
+    }
+}
+```
+
+**Good:**
+
+```php
+// Cyclomatic Complexity: 1
+function track(Event $event, string $type, array $options = []): void
+{
+    $method = "track{$type}";
+    // trackName() can handle the additional checks itself
+    $method($event, $options);
+}
+```
+
+**[⬆ back to top](#table-of-contents)**
 
 ## Objects and Data Structures
 
@@ -1230,7 +1413,7 @@ class BankAccount
         $this->balance += $amount;
     }
 
-    public function getBalance(): int
+    public function getBalance(): int
     {
         return $this->balance;
     }
@@ -1296,6 +1479,107 @@ class Employee
 $employee = new Employee('John Doe');
 // Employee name: John Doe
 echo 'Employee name: ' . $employee->getName();
+```
+
+**[⬆ back to top](#table-of-contents)**
+
+### Use static methods sparingly
+
+Static methods are useful when they are pure functions and have no
+dependencies external to the base language. A static method should not cause any
+side  effects upon execution. These static methods are reusable
+and easy to test and use while testing.
+
+Other methods that are static (because they do not use the instance of the 
+object) still function as expected, though they are not testable (since they
+cannot be mocked). Such methods should be rewritten to be instance methods 
+rather than class methods.
+
+**Bad:**
+
+```php
+class Environment
+{
+    public static function getCredential(string $credential): string
+    {
+        // file system dependency
+        $path = dirname(__DIR__) . '/credentials/';
+        // built-in function with no dependencies
+        $lower = strtolower($credential);
+        // file system dependency
+        return file_get_contents($path . $lower);
+    }
+}
+
+class EnvironmentTest extends UnitTest
+{
+    /**
+     * @skip
+     */
+    public function testGetCredential(): void
+    {
+        // skip this test since it would call the file system
+        // run an integration test for the static method instead of a unit test
+    }
+}
+```
+
+**Good:**
+
+```php
+class Environment
+{
+    public function getCredential(string $credential): string
+    {
+        $path = dirname(__DIR__) . '/credentials/';
+        $lower = strtolower($credential);
+        return file_get_contents($path . $lower);
+    }
+}
+
+class EnvironmentTest extends UnitTest
+{
+    public function testGetCredential(): void
+    {
+        // arrange
+        $credential = 'successfulApiKey';
+        $environment = $this->createMock(Environment::class);
+        $environment->method('getCredential')->willReturn($credential);
+        app()->setContainer(Environment::class, $environment);
+        $subjectUnderTest = app()->getContainer(Environment::class);
+
+        // act
+        $response = $subjectUnderTest->getCredential('bogus');
+
+        // assert
+        self::assertSame($credential, $response);
+    }
+}
+```
+
+**Also Good:**
+
+```php
+class Helpers
+{
+    public static function convertTimeToDateString(int $time): string
+    {
+        // built-in function with no dependencies
+        return date('Y-m-d H:i:s', $time);
+    }
+}
+
+class HelpersTest extends UnitTest
+{
+    public function testConvertTimeToDateString(): void
+    {
+        $time = 1661370120;
+        
+        $response = Helpers::convertTimeToDateString($time); 
+        
+        self::assertSame(date('Y-m-d H:i:s', $time), $response);   
+    }
+}
 ```
 
 **[⬆ back to top](#table-of-contents)**
@@ -1889,8 +2173,8 @@ class Square implements Shape
 
     public function getArea(): int
     {
-        return $this->length ** 2;
-    }
+        return $this->length ** 2;
+    }
 }
 
 function printArea(Shape $shape): void
