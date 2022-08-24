@@ -16,6 +16,7 @@
   3. [Comparison](#comparison)
      * [Use identical comparison](#use-identical-comparison)
      * [Null coalescing operator](#null-coalescing-operator)
+     * [Avoid assignment in conditional expression](#avoid-assignment-in-conditional-expression)
   4. [Functions](#functions)
      * [Use default arguments instead of short circuiting or conditionals](#use-default-arguments-instead-of-short-circuiting-or-conditionals)
      * [Function arguments (2 or fewer ideally)](#function-arguments-2-or-fewer-ideally)
@@ -424,6 +425,32 @@ if (isset($_GET['name'])) {
 **Good:**
 ```php
 $name = $_GET['name'] ?? $_POST['name'] ?? 'nobody';
+```
+
+**[⬆ back to top](#table-of-contents)**
+
+### Avoid assignment in conditional expression
+
+Using the assignment operator in conditional expressions frequently indicates
+programmer error and can result in unexpected behavior.
+[source](https://wiki.sei.cmu.edu/confluence/display/java/EXP51-J.+Do+not+perform+assignments+in+conditional+expressions)
+
+**Bad:**
+
+```php
+if ($result = $database->query($sql)) {
+    // do stuff with $result
+}
+```
+
+**Good:**
+
+```php
+$result = $database->query($sql);
+if ($result === null) {
+    throw new NoQueryResultsException($sql);
+}
+// do stuff with $result
 ```
 
 **[⬆ back to top](#table-of-contents)**
@@ -1207,13 +1234,13 @@ function actionCreate(): Model
         throw new InvalidArgumentTypeException("The count parameter should be an integer.");
     }
     
-    $object = Database::create(self::TABLE, $allowed);
+    $object = $this->database->create(self::TABLE, $allowed);
     
     if ($object === null) {
         throw new CouldNotCreateObjectException('There was an error creating the object in ' . self::TABLE);
     }
     
-    Log::info('Successfully created a new object in ' . self::TABLE);
+    $this->logger->info('Successfully created a new object in ' . self::TABLE);
     
     return $object;
 }
@@ -1232,17 +1259,16 @@ function actionCreate(): Model
     );
 }
 
+// since this is a generic function, it should be in a generic class
 function createObject(string $table, array $parameters): Model
 {
-    // Creating should come from a container and be an instance method.
-    $object = Database::create($table, $allowed);
+    $object = $this->database->create($table, $allowed);
     
     if ($object === null) {
         throw new CouldNotCreateObjectException("There was an error creating the object in {$table}.");
     }
     
-    // Logging should come from a container and be an instance method.
-    Log::info("Successfully created a new object in {$table}.");
+    $this->logger->info("Successfully created a new object in {$table}.");
     
     return $object;
 }
@@ -1387,7 +1413,7 @@ class BankAccount
         $this->balance += $amount;
     }
 
-    public function getBalance(): int
+    public function getBalance(): int
     {
         return $this->balance;
     }
