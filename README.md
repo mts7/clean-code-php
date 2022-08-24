@@ -36,6 +36,7 @@
   5. [Objects and Data Structures](#objects-and-data-structures)
      * [Use object encapsulation](#use-object-encapsulation)
      * [Make objects have private/protected members](#make-objects-have-privateprotected-members)
+     * [Use static methods sparingly](#use-static-methods-sparingly)
   6. [Classes](#classes)
      * [Prefer composition over inheritance](#prefer-composition-over-inheritance)
      * [Avoid fluent interfaces](#avoid-fluent-interfaces)
@@ -1452,6 +1453,107 @@ class Employee
 $employee = new Employee('John Doe');
 // Employee name: John Doe
 echo 'Employee name: ' . $employee->getName();
+```
+
+**[⬆ back to top](#table-of-contents)**
+
+### Use static methods sparingly
+
+Static methods are useful when they are pure functions and have no
+dependencies external to the base language. A static method should not cause any
+side  effects upon execution. These static methods are reusable
+and easy to test and use while testing.
+
+Other methods that are static (because they do not use the instance of the 
+object) still function as expected, though they are not testable (since they
+cannot be mocked). Such methods should be rewritten to be instance methods 
+rather than class methods.
+
+**Bad:**
+
+```php
+class Environment
+{
+    public static function getCredential(string $credential): string
+    {
+        // file system dependency
+        $path = dirname(__DIR__) . '/credentials/';
+        // built-in function with no dependencies
+        $lower = strtolower($credential);
+        // file system dependency
+        return file_get_contents($path . $lower);
+    }
+}
+
+class EnvironmentTest extends UnitTest
+{
+    /**
+     * @skip
+     */
+    public function testGetCredential(): void
+    {
+        // skip this test since it would call the file system
+        // run an integration test for the static method instead of a unit test
+    }
+}
+```
+
+**Good:**
+
+```php
+class Environment
+{
+    public function getCredential(string $credential): string
+    {
+        $path = dirname(__DIR__) . '/credentials/';
+        $lower = strtolower($credential);
+        return file_get_contents($path . $lower);
+    }
+}
+
+class EnvironmentTest extends UnitTest
+{
+    public function testGetCredential(): void
+    {
+        // arrange
+        $credential = 'successfulApiKey';
+        $environment = $this->createMock(Environment::class);
+        $environment->method('getCredential')->willReturn($credential);
+        app()->setContainer(Environment::class, $environment);
+        $subjectUnderTest = app()->getContainer(Environment::class);
+
+        // act
+        $response = $subjectUnderTest->getCredential('bogus');
+
+        // assert
+        self::assertSame($credential, $response);
+    }
+}
+```
+
+**Also Good:**
+
+```php
+class Helpers
+{
+    public static function convertTimeToDateString(int $time): string
+    {
+        // built-in function with no dependencies
+        return date('Y-m-d H:i:s', $time);
+    }
+}
+
+class HelpersTest extends UnitTest
+{
+    public function testConvertTimeToDateString(): void
+    {
+        $time = 1661370120;
+        
+        $response = Helpers::convertTimeToDateString($time); 
+        
+        self::assertSame(date('Y-m-d H:i:s', $time), $response);   
+    }
+}
 ```
 
 **[⬆ back to top](#table-of-contents)**
